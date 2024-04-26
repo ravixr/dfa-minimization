@@ -3,6 +3,7 @@ import java.util.Random;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.stream.Collectors;
+import java.util.Random;
 
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
@@ -269,42 +270,6 @@ class DFA {
         return newPartitions;
     }
 
-    private void removeUselessStates() {
-        boolean[] visited = new boolean[adj.size()];
-        List<Integer> reachableStates = new ArrayList<>();
-        reachableStates.add(initialState);
-        visited[initialState] = true;
-        while (reachableStates.size() > 0) {
-            int state = reachableStates.get(0);
-            reachableStates.remove(0);
-            for (String symbol : symbolSet) {
-                Integer to = adj.get(state).get(symbol);
-                if (to != null && !visited[to]) {
-                    visited[to] = true;
-                    reachableStates.add(to);
-                }
-            }
-        }
-        int useless = 0;
-        for (int i = 0; i < adj.size(); i++) {
-            if (!visited[i]) {
-                // Reshift the states and update the transitions
-                for (int j = 0; j < adj.size(); j++) {
-                    for (String symbol : symbolSet) {
-                        Integer to = adj.get(j).get(symbol);
-                        if (to != null && to > i) {
-                            adj.get(j).put(symbol, to - 1);
-                        }
-                    }
-                }
-                useless++;
-            }
-        }
-        for (int i = 0; i < useless; i++) {
-            adj.removeLast();
-        }
-    }
-
     public DFA stdMinimization2() {
     // se F for vazio, então retorna um autômato com um único estado q0 sem estado final, e todos os simbolos saem de q0 para ele mesmo
         if (final_state_is_empty()) {
@@ -507,6 +472,43 @@ class DFA {
             }
         }
         return true;
+
+    }
+
+    private void removeUselessStates() {
+        boolean[] visited = new boolean[adj.size()];
+        List<Integer> reachableStates = new ArrayList<>();
+        reachableStates.add(initialState);
+        visited[initialState] = true;
+        while (reachableStates.size() > 0) {
+            int state = reachableStates.get(0);
+            reachableStates.remove(0);
+            for (String symbol : symbolSet) {
+                Integer to = adj.get(state).get(symbol);
+                if (to != null && !visited[to]) {
+                    visited[to] = true;
+                    reachableStates.add(to);
+                }
+            }
+        }
+        int useless = 0;
+        for (int i = 0; i < adj.size(); i++) {
+            if (!visited[i]) {
+                // Reshift the states and update the transitions
+                for (int j = 0; j < adj.size(); j++) {
+                    for (String symbol : symbolSet) {
+                        Integer to = adj.get(j).get(symbol);
+                        if (to != null && to > i) {
+                            adj.get(j).put(symbol, to - 1);
+                        }
+                    }
+                }
+                useless++;
+            }
+        }
+        for (int i = 0; i < useless; i++) {
+            adj.removeLast();
+        }
     }
 
     private static final String WATERMARK = "<!-- Created by https://github.com/ravixr/dfa-minimization -->\n";
