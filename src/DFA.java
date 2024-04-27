@@ -1,4 +1,6 @@
 import java.util.List;
+import java.util.Random;
+
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
@@ -63,9 +65,78 @@ class DFA {
             this.adj.add(new HashMap<>());
         }
     }
-
-    public void addTransition(int from, int to, String symbol) {
+    
+    public boolean addTransition(int from, int to, String symbol) {
+        if (adj.get(from).containsKey(symbol)) {
+            return false;
+        }
         adj.get(from).put(symbol, to);
+        return true;
+    }
+
+    public static DFA generateDFA(int nStates, List<String> symbolSet) {
+        DFA dfa = new DFA(nStates, symbolSet);
+        dfa.initialState = 0;
+        Random r = new Random();
+        int nFinalStates = 0;
+
+        // Make sure all states are reachable
+        List<Integer> connectedStates = new ArrayList<>();
+        List<Integer> unconnectedStates = new ArrayList<>();
+        for (int i = 1; i < nStates; i++) {
+            unconnectedStates.add(i);
+        }
+        connectedStates.add(dfa.initialState);
+        while (unconnectedStates.size() > 0) {
+            int from = connectedStates.get(r.nextInt(connectedStates.size()));
+            int to = unconnectedStates.get(r.nextInt(unconnectedStates.size()));
+            String symbol = symbolSet.get(r.nextInt(symbolSet.size()));
+            if (dfa.addTransition(from, to, symbol)) {
+                connectedStates.add(to);
+                unconnectedStates.remove(unconnectedStates.indexOf(to));
+            }
+        }
+    
+        // Add extra random transitions
+        List<Integer> cadidateStates = new ArrayList<>();
+        for (int i = 0; i < nStates; i++) {
+            for (int j = 0; j < (symbolSet.size() - dfa.adj.get(i).size()); j++)
+                cadidateStates.add(i);
+        }
+        for (int i = 0; i < nStates; i++) {
+            for (int j = 0; j < symbolSet.size(); j++) {
+                if (r.nextInt(2) == 0) {
+                    int to = cadidateStates.get(r.nextInt(cadidateStates.size()));
+                    dfa.addTransition(i, to, symbolSet.get(j));
+                }
+            }
+        }
+
+        // Ramdom DFS to mark some states as final
+        boolean[] visited = new boolean[nStates];
+        List<Integer> stack = new ArrayList<>();
+        stack.add(dfa.initialState);
+        while (stack.size() > 0) {
+            int state = stack.get(stack.size() - 1);
+            stack.remove(stack.size() - 1);
+            visited[state] = true;
+            if (r.nextInt(10) == 0) {
+                dfa.finalStates[state] = true;
+                nFinalStates++;
+            }
+            for (String symbol : symbolSet) {
+                Integer to = dfa.adj.get(state).get(symbol);
+                if (to != null && !visited[to]) {
+                    stack.add(to);
+                }
+            }
+            if (nFinalStates == 0 && stack.size() == 0) {
+                dfa.finalStates[state] = true;
+                nFinalStates++;
+            }
+        }
+
+        return dfa;
     }
 
     @Override
@@ -121,7 +192,6 @@ class DFA {
             }
         }
         // Merge states in the same partition
-        // TODO - Remove unreachable states?
         int n = Arrays.stream(statePartition).max().getAsInt() + 1;
         DFA min = new DFA(n, symbolSet);
         for (int i = 0; i < n; i++) {
@@ -134,13 +204,16 @@ class DFA {
                         min.finalStates[i] = true;
                     }
                     for (String symbol : symbolSet) {
-                        int to = adj.get(j).get(symbol);
-                        min.adj.get(i).put(symbol, statePartition[to]);
+                        Integer to = adj.get(j).get(symbol);
+                        if (to != null) {
+                            min.adj.get(i).put(symbol, statePartition[to]);
+                        }
                     }
                     break;
                 }
             }
         }
+        min.removeUselessStates();
         return min;
     }
 
@@ -156,9 +229,13 @@ class DFA {
             for (int j = 0; j < partition.size(); j++) {
                 boolean belongsToPartition = true;
                 for (String symbol : symbolSet) {
-                    int to1 = adj.get(partition.get(j).id).get(symbol);
-                    int to2 = adj.get(newPartitions.get(i).get(0).id).get(symbol);
-                    if (statePartition[to1] != statePartition[to2]) {
+                    Integer to1 = adj.get(partition.get(j).id).get(symbol);
+                    Integer to2 = adj.get(newPartitions.get(i).get(0).id).get(symbol);
+                    if (to1 == null || to2 == null) {
+                        if (to1 != to2) {
+                            belongsToPartition = false;
+                        }
+                    } else if (statePartition[to1] != statePartition[to2]) {
                         belongsToPartition = false;
                         break;
                     }
@@ -181,6 +258,42 @@ class DFA {
         }
 
         return newPartitions;
+    }
+
+    private void removeUselessStates() {
+        boolean[] visited = new boolean[adj.size()];
+        List<Integer> reachableStates = new ArrayList<>();
+        reachableStates.add(initialState);
+        visited[initialState] = true;
+        while (reachableStates.size() > 0) {
+            int state = reachableStates.get(0);
+            reachableStates.remove(0);
+            for (String symbol : symbolSet) {
+                Integer to = adj.get(state).get(symbol);
+                if (to != null && !visited[to]) {
+                    visited[to] = true;
+                    reachableStates.add(to);
+                }
+            }
+        }
+        int useless = 0;
+        for (int i = 0; i < adj.size(); i++) {
+            if (!visited[i]) {
+                // Reshift the states and update the transitions
+                for (int j = 0; j < adj.size(); j++) {
+                    for (String symbol : symbolSet) {
+                        Integer to = adj.get(j).get(symbol);
+                        if (to != null && to > i) {
+                            adj.get(j).put(symbol, to - 1);
+                        }
+                    }
+                }
+                useless++;
+            }
+        }
+        for (int i = 0; i < useless; i++) {
+            adj.removeLast();
+        }
     }
 
     private static final String WATERMARK = "<!-- Created by https://github.com/ravixr/dfa-minimization -->\n";
@@ -247,6 +360,7 @@ class DFA {
         boolean[] finalStates = null;
         List<HashMap<Character, Integer>> adj = new ArrayList<>();
         List<String> symbolSet = new ArrayList<>();
+        HashMap<Integer, Integer> stateMap = new HashMap<>();
         for (int i = 0; i < nStates; i++) {
             adj.add(new HashMap<>());
         }
@@ -271,11 +385,12 @@ class DFA {
                     case XMLStreamConstants.START_ELEMENT:
                         switch (reader.getLocalName()) {
                             case "state":
-                                nStates++;
                                 int id = Integer.parseInt(reader.getAttributeValue(null, "id"));
+                                stateMap.put(id, nStates);
                                 String name = reader.getAttributeValue(null, "name");
-                                states.add(new State(id, name));
+                                states.add(new State(nStates, name));
                                 lastElement = "state";
+                                nStates++;
                                 break;
                             case "transition":
                                 currentTransition = new Transition();
@@ -314,10 +429,10 @@ class DFA {
                         String text = reader.getText().trim();
                         switch (lastElement) {
                             case "to":
-                                currentTransition.to = Integer.parseInt(text);
+                                currentTransition.to = stateMap.get(Integer.parseInt(text));
                                 break;
                             case "from":
-                                currentTransition.from = Integer.parseInt(text);
+                                currentTransition.from =  stateMap.get(Integer.parseInt(text));
                                 break;
                             case "read":
                                 currentTransition.symbol = text;
@@ -376,8 +491,12 @@ class DFA {
     }
 
     public static void foo() {
-        DFA test = DFA.FromJFLAPXML("std_test.jff");
-        DFA min = test.stdMinimization();
-        min.SaveJFLAPXML("std_test_min.jff");
+        DFA gen = DFA.generateDFA(10, Arrays.asList("a", "b"));
+        System.out.println("Original Size: " + gen.adj.size());
+        DFA min = gen.stdMinimization();
+        System.out.println("Minimized Size: " + min.adj.size());
+        String filename = "gen";
+        gen.SaveJFLAPXML(filename + ".jff");
+        min.SaveJFLAPXML(filename + "_min" + ".jff");
     }
 }
