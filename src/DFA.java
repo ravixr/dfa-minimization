@@ -475,6 +475,85 @@ class DFA {
 
     }
 
+    // Minimizes the DFA using the Myphill-Nerode algorithm O(n^2)
+    public DFA stdMinimization3(){
+        int[][] table = new int[adj.size()][adj.size()];
+        for (int i = 0; i < adj.size(); i++) {
+            for (int j = 0; j < adj.size(); j++) {
+                table[i][j] = -1;
+            }
+        }
+
+        for (int i = 0; i < adj.size(); i++) {
+            for (int j = 0; j < adj.size(); j++) {
+                if (i == j) {
+                    continue;
+                }
+                if (finalStates[i] != finalStates[j]) {
+                    table[i][j] = 0;
+                }
+            }
+        }
+
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (int i = 0; i < adj.size(); i++) {
+                for (int j = 0; j < adj.size(); j++) {
+                    if (table[i][j] == -1) {
+                        for (String symbol : symbolSet) {
+                            int to1 = adj.get(i).get(symbol);
+                            int to2 = adj.get(j).get(symbol);
+                            if (table[to1][to2] == 0) {
+                                table[i][j] = 0;
+                                changed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Combine all the unmarked pair (Qi, Qj) and make them a single state in the reduced DFA.
+        List<Integer> newStates = new ArrayList<>();
+        int[] stateMap = new int[adj.size()];
+        for (int i = 0; i < adj.size(); i++) {
+            stateMap[i] = -1;
+        }
+        int n = 0;
+        for (int i = 0; i < adj.size(); i++) {
+            if (stateMap[i] == -1) {
+                newStates.add(i);
+                stateMap[i] = n;
+                for (int j = i + 1; j < adj.size(); j++) {
+                    if (table[i][j] == -1) {
+                        newStates.add(j);
+                        stateMap[j] = n;
+                    }
+                }
+                n++;
+            }
+        }
+
+        DFA min = new DFA(n, symbolSet);
+        for (int i = 0; i < adj.size(); i++) {
+            for (String symbol : symbolSet) {
+                int to = adj.get(i).get(symbol);
+                min.addTransition(stateMap[i], stateMap[to], symbol);
+            }
+        }
+
+        for (int i = 0; i < adj.size(); i++) {
+            if (finalStates[i]) {
+                min.finalStates[stateMap[i]] = true;
+            }
+        }
+
+        return min;
+
+    }
+
     private void removeUselessStates() {
         boolean[] visited = new boolean[adj.size()];
         List<Integer> reachableStates = new ArrayList<>();
