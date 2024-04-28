@@ -1,5 +1,9 @@
 import java.util.List;
 import java.util.Random;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.stream.Collectors;
+import java.util.Random;
 
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
@@ -11,7 +15,9 @@ import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 
 class Transition {
     public int from;
@@ -34,6 +40,10 @@ class State {
         this.id = id;
         this.name = name;
     }
+    @Override
+    public String toString() {
+        return String.format("State{id=%d, name='%s'}", id, name);
+    }
 }
 
 // Deterministic Finite Automaton
@@ -47,7 +57,7 @@ class DFA {
 
     public DFA(int nStates, List<String> symbolSet) {
         this.initialState = -1;
-        this.states = new ArrayList<>();
+        
         this.symbolSet = symbolSet;
         this.finalStates = new boolean[nStates];
         this.adj = new ArrayList<>();
@@ -260,6 +270,211 @@ class DFA {
         return newPartitions;
     }
 
+    public DFA stdMinimization2() {
+    // se F for vazio, então retorna um autômato com um único estado q0 sem estado final, e todos os simbolos saem de q0 para ele mesmo
+        if (final_state_is_empty()) {
+            DFA emptyDFA = new DFA(1, symbolSet);
+            for (String symbol : symbolSet) {
+                emptyDFA.addTransition(0, 0, symbol);
+            }
+            emptyDFA.finalStates = new boolean[1];
+            emptyDFA.finalStates[0] = false;
+            return emptyDFA;
+        }
+
+    // Se não, se E - F for vazio, ou seja, todos os estados são finais, então retorna um autômato com um único estado q0, que também é final, e todos os simbolos saem de q0 para ele mesmo
+        if (all_states_are_final()) {
+            DFA allFinalDFA = new DFA(1, symbolSet);
+            for (String symbol : symbolSet) {
+                allFinalDFA.addTransition(0, 0, symbol);
+            }
+            allFinalDFA.finalStates = new boolean[1];
+            allFinalDFA.finalStates[0] = true;
+            return allFinalDFA;
+        }
+        
+    // Inicializa S0 com como {E - F, F} e n como 0
+        int n = 0;
+        List<List<HashSet<Integer>>> S = new ArrayList<>();
+        S.add(new ArrayList<>()); // S0
+        HashSet<Integer> notFinalStates = getNotFinalStates();
+        HashSet<Integer> finalStates = getFinalStates();
+        S.get(0).add(notFinalStates);
+        S.get(0).add(finalStates);
+
+    // repetirá até que S_n seja igual a S_n-1
+        do {
+            n++;
+            S.add(new ArrayList<>());
+        // para cada X em Sn-1 (X é um conjunto de estados {1,2,3....} e Sn-1 é um conjunto de conjuntos de estados { {1,2,3}, {4,5,6} ... })
+            List<HashSet<Integer>> Sn_minus_1 = S.get(n - 1);
+            for (HashSet<Integer> X_Set : Sn_minus_1) {
+            // Repete até que X seja vazio
+                do {
+                // Escolha um estado em X (X é um conjunto de estados {1,2,3,4....})
+                    var X_set_list = X_Set.stream().collect(Collectors.toList());
+                    int state = X_set_list.getLast();//X_Set.iterator().next();//
+                    HashSet<Integer> transition_set_Sn_minus_1 = new HashSet<>();
+                // Para cada simbolo em sigma
+                    for (String symbol : symbolSet) {
+                        // Seja [delta(e,a)] o conjunto que contem delta(e,a) em Sn-1 para cada simbolo a em sigma
+                        int to = adj.get(state).get(symbol);
+                        for (HashSet<Integer> set : Sn_minus_1) {
+                            if (set.contains(to)) {
+                                transition_set_Sn_minus_1 = set;
+                                break;
+                            }
+                        }
+                        // transition_set_Sn_minus_1.add(to);
+                    }
+
+                // Seja Y o conjunto de estados em X tal que delta(e',a) está em [delta(e,a)] para todo a em sigma
+                    HashSet<Integer> Y_Set = new HashSet<>();
+                // Y tem cada estado em X tal que tem uma transição dele com simbolo a para um estado em transition_set_Sn_minus_1 , para todo simbolo a em sigma   
+                    for (int state_in_X : X_Set) {
+                        boolean belongs_to_Y = false;
+                        for (var symbol : symbolSet) {
+                            int to = adj.get(state_in_X).get(symbol);
+                            if(transition_set_Sn_minus_1.contains(to)){
+                                belongs_to_Y = true;
+                            }
+                        }
+                        if (belongs_to_Y) {
+                            Y_Set.add(state_in_X);
+                        }
+                    }
+                // X = X - Y  X_Set.removeAll(Y);?
+                    X_Set = differenceBetween(X_Set, Y_Set);
+                // Sn = Sn U {Y} 
+                    S.get(n).add(Y_Set);
+
+                } while (!X_Set.isEmpty());
+            }
+        } while (!compare_Sn_Sn_minus_1(S, n));
+
+
+
+        // Criando o novo automato// cria primeiro o novo estado inicial,depois os estados finais e por fim as transições
+    // i' = i em Sn tal que i contem o estado inicial
+        HashSet<Integer> new_initial_state = new HashSet<>();
+        for (int i = 0; i < S.get(n).size(); i++) {
+            if (S.get(n).get(i).contains(initialState)) {
+                new_initial_state = S.get(n).get(i);
+                break;
+            }
+        }
+
+    // F' vais ser o X_set em Sn tal que X_set está contindo em F
+        List<HashSet<Integer>> final_states = new ArrayList<>();
+        var original_final_states = getFinalStates();
+        for (int i = 0; i < S.get(n).size(); i++) {
+            if (original_final_states.containsAll(S.get(n).get(i))) {
+                final_states.add(S.get(n).get(i));
+            }
+        }
+
+    // Cria um novo DFA para cada X_set em Sn e cada simbolo em sigma
+        DFA min = new DFA(S.get(n).size(), symbolSet);
+        // Seta as transições
+        for (int i = 0; i < S.get(n).size(); i++) {
+            HashSet<Integer> X_Set = S.get(n).get(i);
+            for (String symbol : symbolSet) {
+                for (int state : X_Set) {
+                    int to = adj.get(state).get(symbol);
+                    for (int j = 0; j < S.get(n).size(); j++) {
+                        if (S.get(n).get(j).contains(to)) {
+                            min.addTransition(i, j, symbol);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Seta o estado inicial
+        for (int i = 0; i < S.get(n).size(); i++) {
+            if (S.get(n).get(i).equals(new_initial_state)) {
+                min.initialState = i;
+                break;
+            }
+        }
+
+        // Seta os estados finais
+        for (int i = 0; i < S.get(n).size(); i++) {
+            if (final_states.contains(S.get(n).get(i))) {
+                min.finalStates[i] = true;
+            }
+        }
+
+        return min;
+    }
+
+    private HashSet<Integer> differenceBetween(HashSet<Integer> X_Set, HashSet<Integer> Y_Set) {
+        HashSet<Integer> result = new HashSet<>();
+        for (int state : X_Set) {
+            if (!Y_Set.contains(state)) {
+                result.add(state);
+            }
+        }
+        return result;
+    }
+
+    private boolean compare_Sn_Sn_minus_1(List<List<HashSet<Integer>>> S, int n) {
+        if (n == 0) {
+            return false;
+        }
+        List<HashSet<Integer>> Sn = S.get(n);
+        List<HashSet<Integer>> Sn_minus_1 = S.get(n - 1);
+        if (Sn.size() != Sn_minus_1.size()) {
+            return false;
+        }
+        for (HashSet<Integer> hashSet : Sn) {
+            if (!Sn_minus_1.contains(hashSet)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private HashSet<Integer> getFinalStates() {
+        HashSet<Integer> finalStates = new HashSet<>();
+        for (int i = 0; i < this.finalStates.length; i++) {
+            if (this.finalStates[i]) {
+                finalStates.add(i);
+            }
+        }
+        return finalStates;
+    }
+
+    private HashSet<Integer> getNotFinalStates() {
+        HashSet<Integer> notFinalStates = new HashSet<>();
+        for (int i = 0; i < finalStates.length; i++) {
+            if (!finalStates[i]) {
+                notFinalStates.add(i);
+            }
+        }
+        return notFinalStates;
+    }
+
+    private boolean all_states_are_final() {
+        for (int i = 0; i < finalStates.length; i++) {
+            if (!finalStates[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean final_state_is_empty() {
+        for (int i = 0; i < finalStates.length; i++) {
+            if (finalStates[i]) {
+                return false;
+            }
+        }
+        return true;
+
+    }
+
     private void removeUselessStates() {
         boolean[] visited = new boolean[adj.size()];
         List<Integer> reachableStates = new ArrayList<>();
@@ -370,7 +585,6 @@ class DFA {
             
 
             // Pega o caminho geral do programa
-            //System.out.println("Caminho do programa: " + System.getProperty("user.dir"));
             filePath = Paths.get("").toAbsolutePath().toString().split("/src")[0] + ("/tests/" + filePath);
             XMLInputFactory factory = XMLInputFactory.newInstance();
             InputStream inputStream = new FileInputStream(new File(filePath));
