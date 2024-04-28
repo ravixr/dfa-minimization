@@ -77,7 +77,7 @@ class DFA {
     }
     
     public boolean addTransition(int from, int to, String symbol) {
-        if (adj.get(from).containsKey(symbol)) {
+        if ((from < 0 || from >= adj.size()) || (to < 0 || to >= adj.size()) || adj.get(from).containsKey(symbol)) {
             return false;
         }
         adj.get(from).put(symbol, to);
@@ -107,7 +107,7 @@ class DFA {
             }
         }
     
-        // Add extra random transitions
+        // Add rest of transitions
         List<Integer> cadidateStates = new ArrayList<>();
         for (int i = 0; i < nStates; i++) {
             for (int j = 0; j < (symbolSet.size() - dfa.adj.get(i).size()); j++)
@@ -115,10 +115,8 @@ class DFA {
         }
         for (int i = 0; i < nStates; i++) {
             for (int j = 0; j < symbolSet.size(); j++) {
-                if (r.nextInt(2) == 0) {
-                    int to = cadidateStates.get(r.nextInt(cadidateStates.size()));
-                    dfa.addTransition(i, to, symbolSet.get(j));
-                }
+                int to = cadidateStates.get(r.nextInt(cadidateStates.size()));
+                dfa.addTransition(i, to, symbolSet.get(j));
             }
         }
 
@@ -146,6 +144,44 @@ class DFA {
             }
         }
 
+        for (int i = 0; i < nStates; i++) {
+            if (dfa.adj.get(i).size() < symbolSet.size()) {
+                System.err.println("Error: State " + i + "trasitions: " + dfa.adj.get(i).size() + " < " + symbolSet.size());
+            }
+        }
+
+        return dfa;
+    }
+
+    public static DFA generateDoubleStateTest(int nStates) {
+        DFA dfa = new DFA(nStates, Arrays.asList("a", "b"));
+        dfa.initialState = 0;
+        dfa.finalStates[nStates - 1] = true;
+        for (int i = 0; i < nStates - 1; i++) {
+            if (i % 2 == 0) {
+                dfa.addTransition(i, i + 1, "a");
+                dfa.addTransition(i + 1, i, "a");
+                dfa.addTransition(i, i + 2, "b");
+            } else {
+                dfa.addTransition(i, i + 1, "b");
+            }
+        }
+        if (nStates % 2 == 0) {
+            dfa.addTransition(nStates - 2, nStates - 1, "b");
+        }
+        dfa.addTransition(nStates - 1, nStates - 1, "a");
+        dfa.addTransition(nStates - 1, nStates - 1, "b");
+        return dfa;
+    }
+
+    public static DFA generateBinMultN(int nStates) {
+        DFA dfa = new DFA(nStates, Arrays.asList("0", "1"));
+        dfa.initialState = 0;
+        dfa.finalStates[0] = true;
+        for (int i = 0; i < nStates; i++) {
+            dfa.addTransition(i, (2 * i) % nStates, "0");
+            dfa.addTransition(i, (2 * i + 1) % nStates, "1");
+        }
         return dfa;
     }
 
@@ -318,9 +354,9 @@ class DFA {
                 // Para cada simbolo em sigma
                     for (String symbol : symbolSet) {
                         // Seja [delta(e,a)] o conjunto que contem delta(e,a) em Sn-1 para cada simbolo a em sigma
-                        int to = adj.get(state).get(symbol);
+                        Integer to = adj.get(state).get(symbol);
                         for (HashSet<Integer> set : Sn_minus_1) {
-                            if (set.contains(to)) {
+                            if (to != null && set.contains(to)) {
                                 transition_set_Sn_minus_1 = set;
                                 break;
                             }
@@ -334,8 +370,8 @@ class DFA {
                     for (int state_in_X : X_Set) {
                         boolean belongs_to_Y = false;
                         for (var symbol : symbolSet) {
-                            int to = adj.get(state_in_X).get(symbol);
-                            if(transition_set_Sn_minus_1.contains(to)){
+                            Integer to = adj.get(state_in_X).get(symbol);
+                            if(to != null && transition_set_Sn_minus_1.contains(to)){
                                 belongs_to_Y = true;
                             }
                         }
@@ -472,6 +508,85 @@ class DFA {
             }
         }
         return true;
+
+    }
+
+    // Minimizes the DFA using the Myphill-Nerode algorithm O(n^2)
+    public DFA stdMinimization3(){
+        int[][] table = new int[adj.size()][adj.size()];
+        for (int i = 0; i < adj.size(); i++) {
+            for (int j = 0; j < adj.size(); j++) {
+                table[i][j] = -1;
+            }
+        }
+
+        for (int i = 0; i < adj.size(); i++) {
+            for (int j = 0; j < adj.size(); j++) {
+                if (i == j) {
+                    continue;
+                }
+                if (finalStates[i] != finalStates[j]) {
+                    table[i][j] = 0;
+                }
+            }
+        }
+
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (int i = 0; i < adj.size(); i++) {
+                for (int j = 0; j < adj.size(); j++) {
+                    if (table[i][j] == -1) {
+                        for (String symbol : symbolSet) {
+                            int to1 = adj.get(i).get(symbol);
+                            int to2 = adj.get(j).get(symbol);
+                            if (table[to1][to2] == 0) {
+                                table[i][j] = 0;
+                                changed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Combine all the unmarked pair (Qi, Qj) and make them a single state in the reduced DFA.
+        List<Integer> newStates = new ArrayList<>();
+        int[] stateMap = new int[adj.size()];
+        for (int i = 0; i < adj.size(); i++) {
+            stateMap[i] = -1;
+        }
+        int n = 0;
+        for (int i = 0; i < adj.size(); i++) {
+            if (stateMap[i] == -1) {
+                newStates.add(i);
+                stateMap[i] = n;
+                for (int j = i + 1; j < adj.size(); j++) {
+                    if (table[i][j] == -1) {
+                        newStates.add(j);
+                        stateMap[j] = n;
+                    }
+                }
+                n++;
+            }
+        }
+
+        DFA min = new DFA(n, symbolSet);
+        for (int i = 0; i < adj.size(); i++) {
+            for (String symbol : symbolSet) {
+                int to = adj.get(i).get(symbol);
+                min.addTransition(stateMap[i], stateMap[to], symbol);
+            }
+        }
+
+        for (int i = 0; i < adj.size(); i++) {
+            if (finalStates[i]) {
+                min.finalStates[stateMap[i]] = true;
+            }
+        }
+
+        return min;
 
     }
 
