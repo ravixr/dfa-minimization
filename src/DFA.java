@@ -77,7 +77,7 @@ class DFA {
     }
     
     public boolean addTransition(int from, int to, String symbol) {
-        if (adj.get(from).containsKey(symbol)) {
+        if ((from < 0 || from >= adj.size()) || (to < 0 || to >= adj.size()) || adj.get(from).containsKey(symbol)) {
             return false;
         }
         adj.get(from).put(symbol, to);
@@ -107,7 +107,7 @@ class DFA {
             }
         }
     
-        // Add extra random transitions
+        // Add rest of transitions
         List<Integer> cadidateStates = new ArrayList<>();
         for (int i = 0; i < nStates; i++) {
             for (int j = 0; j < (symbolSet.size() - dfa.adj.get(i).size()); j++)
@@ -115,10 +115,8 @@ class DFA {
         }
         for (int i = 0; i < nStates; i++) {
             for (int j = 0; j < symbolSet.size(); j++) {
-                if (r.nextInt(2) == 0) {
-                    int to = cadidateStates.get(r.nextInt(cadidateStates.size()));
-                    dfa.addTransition(i, to, symbolSet.get(j));
-                }
+                int to = cadidateStates.get(r.nextInt(cadidateStates.size()));
+                dfa.addTransition(i, to, symbolSet.get(j));
             }
         }
 
@@ -146,6 +144,44 @@ class DFA {
             }
         }
 
+        for (int i = 0; i < nStates; i++) {
+            if (dfa.adj.get(i).size() < symbolSet.size()) {
+                System.err.println("Error: State " + i + "trasitions: " + dfa.adj.get(i).size() + " < " + symbolSet.size());
+            }
+        }
+
+        return dfa;
+    }
+
+    public static DFA generateDoubleStateTest(int nStates) {
+        DFA dfa = new DFA(nStates, Arrays.asList("a", "b"));
+        dfa.initialState = 0;
+        dfa.finalStates[nStates - 1] = true;
+        for (int i = 0; i < nStates - 1; i++) {
+            if (i % 2 == 0) {
+                dfa.addTransition(i, i + 1, "a");
+                dfa.addTransition(i + 1, i, "a");
+                dfa.addTransition(i, i + 2, "b");
+            } else {
+                dfa.addTransition(i, i + 1, "b");
+            }
+        }
+        if (nStates % 2 == 0) {
+            dfa.addTransition(nStates - 2, nStates - 1, "b");
+        }
+        dfa.addTransition(nStates - 1, nStates - 1, "a");
+        dfa.addTransition(nStates - 1, nStates - 1, "b");
+        return dfa;
+    }
+
+    public static DFA generateBinMultN(int nStates) {
+        DFA dfa = new DFA(nStates, Arrays.asList("0", "1"));
+        dfa.initialState = 0;
+        dfa.finalStates[0] = true;
+        for (int i = 0; i < nStates; i++) {
+            dfa.addTransition(i, (2 * i) % nStates, "0");
+            dfa.addTransition(i, (2 * i + 1) % nStates, "1");
+        }
         return dfa;
     }
 
@@ -318,9 +354,9 @@ class DFA {
                 // Para cada simbolo em sigma
                     for (String symbol : symbolSet) {
                         // Seja [delta(e,a)] o conjunto que contem delta(e,a) em Sn-1 para cada simbolo a em sigma
-                        int to = adj.get(state).get(symbol);
+                        Integer to = adj.get(state).get(symbol);
                         for (HashSet<Integer> set : Sn_minus_1) {
-                            if (set.contains(to)) {
+                            if (to != null && set.contains(to)) {
                                 transition_set_Sn_minus_1 = set;
                                 break;
                             }
@@ -334,8 +370,8 @@ class DFA {
                     for (int state_in_X : X_Set) {
                         boolean belongs_to_Y = false;
                         for (var symbol : symbolSet) {
-                            int to = adj.get(state_in_X).get(symbol);
-                            if(transition_set_Sn_minus_1.contains(to)){
+                            Integer to = adj.get(state_in_X).get(symbol);
+                            if(to != null && transition_set_Sn_minus_1.contains(to)){
                                 belongs_to_Y = true;
                             }
                         }
