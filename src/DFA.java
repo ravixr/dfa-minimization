@@ -1,10 +1,10 @@
+/**
+ * @authors https://github.com/ravixr/dfa-minimization
+ */
+
 import java.util.List;
 import java.util.Random;
-import java.util.Map;
-import java.util.PriorityQueue;
 import java.util.stream.Collectors;
-import java.util.Random;
-
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
@@ -15,7 +15,6 @@ import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 
@@ -801,12 +800,13 @@ class DFA {
 
     @Override
     public String toString() {
-        String str = "";
-        str += "Initial state: " + initialState + "\n";
+        String str = "\n";
+        str += "Number of States: " + adj.size() + "\n";
+        str += "Initial state: q" + initialState + "\n";
         str += "Final states: ";
         for (int i = 0; i < finalStates.length; i++) {
             if (finalStates[i]) {
-                str += i + " ";
+                str += "q" + i + " ";
             }
         }
         str += "\n";
