@@ -367,6 +367,7 @@ class DFA {
         }
 
         DFA min = new DFA(n, symbolSet);
+        min.initialState = stateMap[initialState];
         for (int i = 0; i < adj.size(); i++) {
             for (String symbol : symbolSet) {
                 int to = adj.get(i).get(symbol);
