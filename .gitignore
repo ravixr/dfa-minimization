@@ -23,9 +23,6 @@
 hs_err_pid*
 replay_pid*
 
-# JFLAP files
-*.jff
-
 # Results 
 *.csv
 
